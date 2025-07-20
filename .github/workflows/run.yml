@@ -40,20 +40,10 @@ jobs:
             -keypass $KEY_PASSWORD \
             -dname "CN=CI, OU=Temp, O=Github, C=US"
 
-  #    - name: Clean workspace
-  #      run: ./gradlew clean --no-daemon
-
       - name: Build with stacktrace
         run: |
-          ./gradlew assembleDebug \
-            --no-daemon \
-            --stacktrace \
-            --info \
-            -Pandroid.injected.signing.store.file=keystore.jks \
-            -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
-            -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
-            -Pandroid.injected.signing.key.password=$KEY_PASSWORD
-
+          ./gradlew assembleDebug 
+        
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
