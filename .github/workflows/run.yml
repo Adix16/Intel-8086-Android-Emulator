@@ -1,72 +1,36 @@
-name: Android CI/CD
+name: Build & Sign APK
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-env:
-  KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-  KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-  KEYSTORE_FILE: ${{ secrets.KEYSTORE_FILE_BASE64 }}
+on: [push, pull_request]
 
 jobs:
-  build:
+  build-and-sign:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-    - name: Generate signing key
-      if: env.KEYSTORE_FILE == ''
-      run: |
-        keytool -genkey -v \
-          -keystore my-release-key.keystore \
-          -alias my-key-alias \
-          -keyalg RSA -keysize 2048 -validity 10000 \
-          -storepass $KEYSTORE_PASSWORD \
-          -keypass $KEY_PASSWORD \
-          -dname "CN=, OU=, O=, L=, S=, C="
-      shell: bash
+      - name: Make gradlew executable
+        run: chmod +x gradlew
 
-    - name: Use existing signing key
-      if: env.KEYSTORE_FILE != ''
-      run: |
-        echo $KEYSTORE_FILE | base64 -d > my-release-key.keystore
-      shell: bash
+      - name: Generate signing key (if none exists)
+        run: |
+          keytool -genkeypair \
+            -v -keystore debug.keystore \
+            -alias AndroidDebugKey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=, OU=, O=, L=, S=, C="
 
-    - name: Build debug APK
-      run: ./gradlew assembleDebug
+      - name: Build and sign debug APK
+        run: ./gradlew assembleDebug
 
-    - name: Build release APK
-      run: |
-        ./gradlew assembleRelease \
-          -Pandroid.injected.signing.store.file=my-release-key.keystore \
-          -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
-          -Pandroid.injected.signing.key.alias=my-key-alias \
-          -Pandroid.injected.signing.key.password=$KEY_PASSWORD
-
-    - name: Build release AAB
-      run: |
-        ./gradlew bundleRelease \
-          -Pandroid.injected.signing.store.file=my-release-key.keystore \
-          -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
-          -Pandroid.injected.signing.key.alias=my-key-alias \
-          -Pandroid.injected.signing.key.password=$KEY_PASSWORD
-
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: app-builds
-        path: |
-          app/build/outputs/apk/debug/*.apk
-          app/build/outputs/apk/release/*.apk
-          app/build/outputs/bundle/release/*.aab
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-app-debug.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
