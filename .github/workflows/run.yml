@@ -40,8 +40,8 @@ jobs:
             -keypass $KEY_PASSWORD \
             -dname "CN=CI, OU=Temp, O=Github, C=US"
 
-      - name: Clean workspace
-        run: ./gradlew clean --no-daemon
+  #    - name: Clean workspace
+  #      run: ./gradlew clean --no-daemon
 
       - name: Build with stacktrace
         run: |
