@@ -1,30 +1,35 @@
-name: Android Build & Sign (Modern)
+name: Android Build (Stable)
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   workflow_dispatch:
 
 env:
-  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx2048m"
-  KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'android' }}  # Fallback for testing
+  # Memory and daemon settings
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx3g -XX:MaxMetaspaceSize=1g"
+  # Fallback keys (override with secrets in production)
+  KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'android' }}
   KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'android' }}
   KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'mykey' }}
 
 jobs:
-  build-and-sign:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4  # Updated to v4
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Generate temporary keystore (if no secret)
+      - name: Grant gradlew permissions
+        run: chmod +x gradlew
+
+      - name: Generate temporary keystore
         if: env.KEYSTORE_FILE_BASE64 == ''
         run: |
           keytool -genkey -noprompt \
@@ -33,36 +38,26 @@ jobs:
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass $KEYSTORE_PASSWORD \
             -keypass $KEY_PASSWORD \
-            -dname "CN=Temp, OU=Dev, O=Test, L=Cloud, C=CI"
+            -dname "CN=CI, OU=Temp, O=Github, C=US"
 
-      - name: Use existing keystore (if secret exists)
-        if: env.KEYSTORE_FILE_BASE64 != ''
-        run: |
-          echo "$KEYSTORE_FILE_BASE64" | base64 -d > keystore.jks
+      - name: Clean workspace
+        run: ./gradlew clean --no-daemon
 
-      - name: Build and sign APK
+      - name: Build with stacktrace
         run: |
-          ./gradlew clean assembleRelease \
+          ./gradlew assembleDebug \
             --no-daemon \
             --stacktrace \
+            --info \
             -Pandroid.injected.signing.store.file=keystore.jks \
             -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
             -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
             -Pandroid.injected.signing.key.password=$KEY_PASSWORD
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4  # Critical fix!
+        uses: actions/upload-artifact@v4
         with:
-          name: android-builds
+          name: build-outputs
           path: |
-            app/build/outputs/apk/release/*.apk
-            app/build/outputs/bundle/release/*.aab
-          retention-days: 7  # Auto-delete after 1 week
-
-      - name: Upload to GitHub Releases (on tag)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2  # Updated to v2
-        with:
-          files: |
-            app/build/outputs/apk/release/*.apk
-            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/**/*.apk
+          retention-days: 3
